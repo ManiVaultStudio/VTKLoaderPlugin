@@ -1,0 +1,6 @@
+{
+  "dependencies": [ "Points" ],
+  "menuName": "VTK (.vtk)",
+  "name": "VTK Loader",
+  "version": "1"
+}
