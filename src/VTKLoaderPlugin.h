@@ -18,6 +18,8 @@ public:
     
     void init() override;
 
+    std::vector<std::string> cutString(std::string str);
+
     void loadData() Q_DECL_OVERRIDE;
 
 private:
