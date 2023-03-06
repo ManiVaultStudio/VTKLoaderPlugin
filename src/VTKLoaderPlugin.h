@@ -21,6 +21,7 @@ public:
     std::vector<std::string> cutString(std::string str);
 
     void loadData() Q_DECL_OVERRIDE;
+    bool isNumber(std::string str);
 
 private:
     unsigned int _numDimensions;
