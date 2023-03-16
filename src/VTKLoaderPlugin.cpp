@@ -87,23 +87,24 @@ void VTKLoaderPlugin::loadData()
         int numDimensions = 8;
         // creates a 1D vector used to read the completed dataset into the hdps points datatype
         std::vector<float> dataSet;
+        std::vector<std::vector<std::array<float,3 >>> flowLines;
+        
+        std::string type;
+        int flowLineSize = 0;
+        std::string myString;
+        std::string dimensions;
+        int xCor, yCor, zCor;
 
         for (int t = 0; t < timePoints; t++) {
-
             // Notify the core system of the new data
             events().notifyDatasetAdded(points);
-
             QCoreApplication::processEvents();
-
             points->getDataHierarchyItem().setTaskRunning();
             points->getDataHierarchyItem().setTaskName("Load volume");
-
             points->getDataHierarchyItem().setTaskDescription("Allocating voxels");
-
             QCoreApplication::processEvents();
 
-            std::string myString;
-            std::string dimensions;
+            
             int i = 0;
             //float b;
             std::ifstream file(filePath[t].toStdString());
@@ -119,7 +120,6 @@ void VTKLoaderPlugin::loadData()
             }
 
             if (!dimensions.empty()) {
-                std::cout << "i made it" << std::endl;
                 std::vector<std::string> seperatedLine = VTKLoaderPlugin::cutString(myString);
                 numPoints = std::stoi(seperatedLine[1]);
                 seperatedLine = VTKLoaderPlugin::cutString(dimensions);
@@ -127,26 +127,18 @@ void VTKLoaderPlugin::loadData()
                 ySize = std::stoi(seperatedLine[2]);
                 zSize = std::stoi(seperatedLine[3]);
             }
-
-            int xCor, yCor, zCor;
-
-            std::array<float, 3> pointLocation = { 0,0,0 };
-
-            std::vector<std::array<float, 3>> pointLocationsVector;
-
             QCoreApplication::processEvents();
-
             points->getDataHierarchyItem().setTaskDescription("Loading points");
 
+            std::array<float, 3> pointLocation = { 0,0,0 };
+            std::vector<std::array<float, 3>> pointLocationsVector;
             QCoreApplication::processEvents();
             std::vector<std::string> seperatedLine;
-
             while (getline(file, myString)) {
                 if (myString.empty()) {
                     break;
                 }
                 else if (!isNumber(VTKLoaderPlugin::cutString(myString)[0])) {
-
                     break;
                 }
                 else {
@@ -159,23 +151,18 @@ void VTKLoaderPlugin::loadData()
             }
             numPoints = pointLocationsVector.size();
             getline(file, myString);
-
             seperatedLine = VTKLoaderPlugin::cutString(myString);
-            auto type = seperatedLine[0];
+            type = seperatedLine[0];
             if (type == "SCALARS") {
                 getline(file, myString);
-
                 std::vector<float> velocityMagnitude;
-                std::cout << "test" << std::endl;
                 while (getline(file, myString)) {
                     if (!isNumber(VTKLoaderPlugin::cutString(myString)[0])) {
                         break;
                     }
                     velocityMagnitude.push_back(std::stof(myString));
                 }
-
                 std::array<float, 3> velocityVector = { 0,0,0 };
-
                 std::vector<std::array<float, 3>> velocityVectorVector;
 
                 while (getline(file, myString)) {
@@ -191,6 +178,7 @@ void VTKLoaderPlugin::loadData()
                     velocityVector[2] = std::stof(seperatedLine[2]);
                     velocityVectorVector.push_back(velocityVector);
                 }
+                velocityVector.~array();
                 file.close();
 
                 int iterator = 0;
@@ -219,6 +207,7 @@ void VTKLoaderPlugin::loadData()
                         QCoreApplication::processEvents();
                     }
                 }
+                pointLocationsVector.~vector();
             }
             else if (type == "LINES") {
                 numDimensions = 3;
@@ -227,7 +216,6 @@ void VTKLoaderPlugin::loadData()
                         break;
                     }
                 }
-
                 getline(file, myString);
                 getline(file, myString);
                 getline(file, myString);
@@ -242,10 +230,9 @@ void VTKLoaderPlugin::loadData()
                     }
                     lineIndex.push_back(std::stoi(myString));
                 }
-
                 getline(file, myString);
+                lineIndex.~vector();
                 std::vector<float> speed;
-
                 while (getline(file, myString)) {
                     if (myString.empty()) {
                         break;
@@ -255,6 +242,7 @@ void VTKLoaderPlugin::loadData()
                     }
                     speed.push_back(std::stof(myString));
                 }
+                speed.~vector();
                 getline(file, myString);
                 std::vector<int> ID;
                 while (getline(file, myString)) {
@@ -266,14 +254,57 @@ void VTKLoaderPlugin::loadData()
                     }
                     ID.push_back(std::stoi(myString));
                 }
-
                 file.close();
+                ID.~vector();
+                int iterator = 0;
+                std::vector<std::array<float, 3>> tempFlowLine;
+                for (int i = 0; i < pointLocationsVector.size(); i++) {
+                    
+                    tempFlowLine.push_back(pointLocationsVector[i]);
+                    if ((i+1) % 8 == 0 && i!=0) {
+                        if (t == 0) {
+                            flowLines.push_back(tempFlowLine);
+                            tempFlowLine.clear();
+                        }
+                        else {
+                            flowLines[(i) / 8].push_back(tempFlowLine[3]);
+                            flowLines[(i) / 8].push_back(tempFlowLine[4]);
+                            flowLines[(i) / 8].push_back(tempFlowLine[5]);
+                            flowLines[(i) / 8].push_back(tempFlowLine[6]);
+                            flowLines[(i) / 8].push_back(tempFlowLine[7]);
+                            tempFlowLine.clear();
+                        }
+                    }
+                }
+                tempFlowLine.~vector();
+                
+                flowLineSize = flowLines[0].size();
+                std::cout << "size is = " << flowLines.size() << std::endl;
+                std::cout << "size of line is = " << flowLineSize << std::endl;
+            }
+        }
+        for (int i = 0; i < flowLines.size(); i++) {
+            for (int j = 0; j < flowLineSize; j++) {
+                dataSet.push_back(flowLines[i][j][0]);
+                dataSet.push_back(flowLines[i][j][1]);
+                dataSet.push_back(flowLines[i][j][2]);
             }
         }
         points->getDataHierarchyItem().setTaskProgress(1.0f);
-        points->setData(dataSet.data(), numPoints * timePoints, numDimensions);
+        points->setProperty("lineSize", flowLineSize);
+    
+        if (type == "LINES") {
+            points->setData(dataSet.data(), flowLines.size()* flowLineSize, numDimensions);
+        }
+        else {
+            points->setData(dataSet.data(), numPoints* timePoints, numDimensions);
+        }
+        
+        
         events().notifyDatasetChanged(points);
+        
         points->getDataHierarchyItem().setTaskFinished();
+        
     }
 }
 
