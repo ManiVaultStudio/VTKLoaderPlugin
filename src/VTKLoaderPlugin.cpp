@@ -87,7 +87,7 @@ void VTKLoaderPlugin::loadData()
         int numDimensions = 8;
         // creates a 1D vector used to read the completed dataset into the hdps points datatype
         std::vector<float> dataSet;
-        std::vector<std::vector<std::array<float,3 >>> flowLines;
+        std::vector<std::vector<std::array<float,4 >>> flowLines;
         
         std::string type;
         int flowLineSize = 0;
@@ -154,6 +154,7 @@ void VTKLoaderPlugin::loadData()
             seperatedLine = VTKLoaderPlugin::cutString(myString);
             type = seperatedLine[0];
             if (type == "SCALARS") {
+                std::cout << "wrong " << std::endl;
                 getline(file, myString);
                 std::vector<float> velocityMagnitude;
                 while (getline(file, myString)) {
@@ -242,7 +243,7 @@ void VTKLoaderPlugin::loadData()
                     }
                     speed.push_back(std::stof(myString));
                 }
-                speed.~vector();
+                
                 getline(file, myString);
                 std::vector<int> ID;
                 while (getline(file, myString)) {
@@ -257,10 +258,10 @@ void VTKLoaderPlugin::loadData()
                 file.close();
                 ID.~vector();
                 int iterator = 0;
-                std::vector<std::array<float, 3>> tempFlowLine;
+                std::vector<std::array<float, 4>> tempFlowLine;
                 for (int i = 0; i < pointLocationsVector.size(); i++) {
                     
-                    tempFlowLine.push_back(pointLocationsVector[i]);
+                    tempFlowLine.push_back({ pointLocationsVector[i][0], pointLocationsVector[i][1], pointLocationsVector[i][2], speed[i]});
                     if ((i+1) % 8 == 0 && i!=0) {
                         if (t == 0) {
                             flowLines.push_back(tempFlowLine);
@@ -288,13 +289,15 @@ void VTKLoaderPlugin::loadData()
                 dataSet.push_back(flowLines[i][j][0]);
                 dataSet.push_back(flowLines[i][j][1]);
                 dataSet.push_back(flowLines[i][j][2]);
+                dataSet.push_back(flowLines[i][j][3]);
+                
             }
         }
         points->getDataHierarchyItem().setTaskProgress(1.0f);
         points->setProperty("lineSize", flowLineSize);
     
         if (type == "LINES") {
-            points->setData(dataSet.data(), flowLines.size()* flowLineSize, numDimensions);
+            points->setData(dataSet.data(), flowLines.size()* flowLineSize, 4);
         }
         else {
             points->setData(dataSet.data(), numPoints* timePoints, numDimensions);
