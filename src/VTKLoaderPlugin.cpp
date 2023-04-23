@@ -2,13 +2,13 @@
 
 #include "VTKLoaderPlugin.h"
 
-#include "PointData.h"
-
+#include "PointData/PointData.h"
 #include "Set.h"
-#include<iostream> 
 
 
-#include<fstream> 
+#include <iostream>
+#include <fstream>
+
 #include <QtCore>
 #include <QtDebug>
 #include <QFileDialog>
