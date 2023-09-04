@@ -410,7 +410,7 @@ void VTKLoaderPlugin::loadData()
             points->setData(dataSet.data(), numPoints* timePoints, numDimensions);
         }
         
-        events().notifyDatasetChanged(points);
+        events().notifyDatasetDataChanged(points);
         
         points->getDataHierarchyItem().setTaskFinished();
         
