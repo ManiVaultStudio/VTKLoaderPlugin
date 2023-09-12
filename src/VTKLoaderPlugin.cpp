@@ -8,6 +8,8 @@
 
 #include <iostream>
 #include <fstream>
+#include <ClusterData/ClusterData.h>
+
 
 #include <QtCore>
 #include <QtDebug>
@@ -35,7 +37,7 @@ using namespace hdps;
 
 VTKLoaderPlugin::~VTKLoaderPlugin(void)
 {
-    
+
 }
 
 /**
@@ -49,7 +51,7 @@ void VTKLoaderPlugin::init()
 }
 
 /**
- * Funtion the loads in the data and transforms it from its file type to pointsdata. 
+ * Funtion the loads in the data and transforms it from its file type to pointsdata.
  * It also fills in missing data in the input volume with values 1 smaller than the smallest value in the dimension
  * (needed for visualization).
  */
@@ -61,11 +63,11 @@ void VTKLoaderPlugin::loadData()
     QFileDialog fileDialog;
     fileDialog.setFileMode(QFileDialog::ExistingFiles);
     QStringList filePath = fileDialog.getOpenFileNames(nullptr, "Open a .vtk file", workingDirectory); // Open the file selector
-    
+
     if (QFileInfo(filePath[0]).exists())
         setSetting("Data/WorkingDirectory", QFileInfo(filePath[0]).absoluteDir().absolutePath());
 
-    std::string vtk = ".vtk"; 
+    std::string vtk = ".vtk";
     std::vector<int> incorrectIndex;
 
     for (int i = 0; i < filePath.length(); i++) {
@@ -76,24 +78,27 @@ void VTKLoaderPlugin::loadData()
     }
 
     if (incorrectIndex.size() != 0) {
-            QMessageBox messageBox;
-            messageBox.critical(0, "Error", "File(s) is/are not of type(s) .vtk"); // Throws error if file format is wrong
-            messageBox.setFixedSize(500, 200);
-        
+        QMessageBox messageBox;
+        messageBox.critical(0, "Error", "File(s) is/are not of type(s) .vtk"); // Throws error if file format is wrong
+        messageBox.setFixedSize(500, 200);
+
     }
     else {
         std::string base_filename = filePath[0].toStdString().substr(filePath[0].toStdString().find_last_of("/\\") + 1);
         std::string::size_type const p(base_filename.find_last_of('.'));
         std::string fileName = base_filename.substr(0, p);
         auto points = _core->addDataset<Points>("Points", QString::fromStdString(fileName)); // create a datafile in the hdps core
+
+        auto pointsLine = _core->addDataset<Points>("Points", QString::fromStdString(fileName + "line")); // create a datafile in the hdps core
         int timePoints = filePath.length();
         int numPoints;
         int xSize, ySize, zSize;
         int numDimensions = 8;
         // creates a 1D vector used to read the completed dataset into the hdps points datatype
         std::vector<float> dataSet;
-        std::vector<std::vector<std::array<float,6 >>> flowLines;
-        std::vector<std::vector<std::array<float,6 >>> flowLinesPrefix;
+        std::vector<std::vector<std::array<float, 7 >>> flowLines;
+        std::vector<std::vector<std::array<float, 7 >>> flowLinesPrefix;
+        std::vector<float> pathlines;
         int newTest = 0;
         std::string type;
         int flowLineSize = 0;
@@ -105,6 +110,7 @@ void VTKLoaderPlugin::loadData()
         int groupSize = filePath.size() / 30;
         int countLines = -1;
         int cumulativeLines = 0;
+        int cumulativeLinesSaved = 0;
 
         // Notify the core system of the new data
         events().notifyDatasetAdded(points);
@@ -118,16 +124,16 @@ void VTKLoaderPlugin::loadData()
         points->getDataHierarchyItem().setTaskDescription("Loading points");
         QCoreApplication::processEvents();
 
-       
+
         for (int group = 0; group < groupSize; group++) {
-           /* std::cout << countLines << std::endl;
-            std::cout << cumulativeLines << std::endl;
-            cumulativeLines = cumulativeLines + countLines+1;
-            std::cout << cumulativeLines << std::endl;*/
+            /* std::cout << countLines << std::endl;
+             std::cout << cumulativeLines << std::endl;
+             cumulativeLines = cumulativeLines + countLines+1;
+             std::cout << cumulativeLines << std::endl;*/
 
             for (int t = 0; t < 30; t++) {
-                
-                
+
+
 
                 int i = 0;
                 int q = 0;
@@ -141,7 +147,7 @@ void VTKLoaderPlugin::loadData()
 
                 }
                 std::ifstream file(filePath[q].toStdString());
-                std::cout << filePath[q].toStdString() << std::endl;
+                //std::cout << filePath[q].toStdString() << std::endl;
                 while (getline(file, myString)) {
                     if (i == 4) {
                         dimensions = myString;
@@ -160,10 +166,10 @@ void VTKLoaderPlugin::loadData()
                     ySize = std::stoi(seperatedLine[2]);
                     zSize = std::stoi(seperatedLine[3]);
                 }
-               
+
                 std::array<float, 3> pointLocation = { 0,0,0 };
                 std::vector<std::array<float, 3>> pointLocationsVector;
-               
+
                 std::vector<std::string> seperatedLine;
                 while (getline(file, myString)) {
                     if (myString.empty()) {
@@ -299,43 +305,44 @@ void VTKLoaderPlugin::loadData()
                     file.close();
                     ID.~vector();
                     int iterator = 0;
-                    std::vector<std::array<float, 6>> tempFlowLine;
-                    
+                    std::vector<std::array<float, 7>> tempFlowLine;
+
                     countLines = -1;
                     if (group == 0)
                     {
                         cumulativeLines = countLines;
                     }
-                    else {
-                        cumulativeLines = flowLines[0].size() - 1;
+                    else if (t == 0) {
+                        cumulativeLines = flowLines.size() - 1;
+                        cumulativeLinesSaved = cumulativeLines;
                     }
-                    
-                    
+                    else {
+                        cumulativeLines = cumulativeLinesSaved;
+                    }
+
                     float previousIndex = -1;
                     int test = 0;
-
                     auto temp = lineIndex;
-                    
 
-                    
                     int l = 0;
                     for (int i = 0; i < pointLocationsVector.size(); i++) {
-                        if (previousIndex != lineIndex[i])
+                        if (test == 0)//previousIndex != lineIndex[i])
                         {
                             l = 0;
+                            test = 1;
                             countLines++;
                             cumulativeLines++;
                             previousIndex = lineIndex[i];
                             tempFlowLine.clear();
-                            
+
                         }
-                        tempFlowLine.push_back({ pointLocationsVector[i][0], pointLocationsVector[i][1], pointLocationsVector[i][2], speed[i], lineIndex[i], float(t) });
+                        tempFlowLine.push_back({ pointLocationsVector[i][0], pointLocationsVector[i][1], pointLocationsVector[i][2], speed[i], lineIndex[i], float(t), float(group) });
                         l++;
 
-                        
-                        
+
                         if (l == lineIndexSize[countLines][0])
                         {
+                            test = 0;
                             if (t == 0) {
                                 flowLines.push_back(tempFlowLine);
                                 tempFlowLine.clear();
@@ -343,41 +350,30 @@ void VTKLoaderPlugin::loadData()
                             }
                             else {
                                 int copy = 0;
+
                                 for (int j = 3; j < l; j++)
                                 {
                                     flowLines[cumulativeLines].push_back(tempFlowLine[j]);
-                                    
-
                                     copy = j;
                                 }
                                 if (l != 8) {
                                     for (int j = 0; j < 8 - l; j++)
                                     {
-                                        
                                         flowLines[cumulativeLines].push_back(tempFlowLine[copy]);
-                                       
                                     }
-                                    
-                                }
-                               
 
+                                }
                             }
                         }
                     }
-                    
-
                 }
                 if (((group * 30 + t) % 5) == 0) {
-                    
-                    points->getDataHierarchyItem().setTaskProgress((t+group*30) / static_cast<float>(groupSize * 30));
+                    points->getDataHierarchyItem().setTaskProgress((t + group * 30) / static_cast<float>(groupSize * 30));
                     QCoreApplication::processEvents();
                 }
             }
         }
-        
-        
-        std::cout << "test1" << std::endl;
-       
+        int q = 0;
         for (int i = 0; i < flowLines.size(); i++) {
             for (int j = 0; j < flowLines[i].size(); j++) {
                 /*if (flowLines[i][j][0] > 400) {
@@ -392,29 +388,94 @@ void VTKLoaderPlugin::loadData()
                 //if (flowLines[i][j][4] == 0) {
                 //    //std::cout << "found" << std::endl;
                 //}
+
+                if (flowLines[i].size() > q) {
+                    std::cout << flowLines[i].size() << "   " << i << " " << flowLines.size() << std::endl;
+                    q = flowLines[i].size();
+                }
+                pathlines.push_back(flowLines[i][j][0]);
+                pathlines.push_back(flowLines[i][j][1]);
+                pathlines.push_back(flowLines[i][j][2]);
+                pathlines.push_back(flowLines[i][j][3]);
+                pathlines.push_back(flowLines[i][j][5]);
+
                 dataSet.push_back(flowLines[i][j][0]);
                 dataSet.push_back(flowLines[i][j][1]);
                 dataSet.push_back(flowLines[i][j][2]);
-                dataSet.push_back(flowLines[i][j][3]); 
-                dataSet.push_back(flowLines[i][j][4]); 
-                dataSet.push_back(flowLines[i][j][5]); 
+                dataSet.push_back(flowLines[i][j][3]);
+                dataSet.push_back(flowLines[i][j][4]);
+                dataSet.push_back(flowLines[i][j][5]);
+                dataSet.push_back(flowLines[i][j][6]);
             }
         }
-        
+
+
         //points->getDataHierarchyItem().setTaskProgress(1.0f);
+        //std::cout << "size: " << flowLines[0].size() << std::endl;
         points->setProperty("lineSize", flowLines[0].size());
+        pointsLine->setProperty("lineSize", flowLines[0].size());
+
         if (type == "LINES") {
-            points->setData(dataSet.data(), flowLines.size()* (flowLines[0].size()), 6);
+            points->setData(dataSet.data(), flowLines.size() * (flowLines[0].size()), 7);
+            pointsLine->setData(dataSet.data(), flowLines.size(), flowLines[0].size() * 7);
+
         }
         else {
-            points->setData(dataSet.data(), numPoints* timePoints, numDimensions);
+            points->setData(dataSet.data(), numPoints * timePoints, numDimensions);
         }
-        
+        std::vector<QString> dimNames;
+        int alterator = 0;
+        for (int i = 0; i < flowLines[0].size() * 7; i++)
+        {
+            if (alterator == 7) {
+                alterator = 0;
+            }
+            if (alterator == 0) {
+                QString string = QString("x") + QString::number(i / 7);
+                dimNames.push_back(string);
+            }
+            else if (alterator == 1) {
+                QString string = QString("y") + QString::number(i / 7);
+                dimNames.push_back(string);
+            }
+            else if (alterator == 2) {
+                QString string = QString("z") + QString::number(i / 7);
+                dimNames.push_back(string);
+            }
+            else if (alterator == 3) {
+                QString string = QString("speed") + QString::number(i / 7);
+                dimNames.push_back(string);
+            }
+            else if (alterator == 4) {
+                QString string = QString("index") + QString::number(i / 7);
+                dimNames.push_back(string);
+            }
+            else if (alterator == 5) {
+                QString string = QString("time") + QString::number(i / 7);
+                dimNames.push_back(string);
+            }
+            else {
+                QString string = QString("group") + QString::number(i / 7);
+                dimNames.push_back(string);
+            }
+
+
+            alterator++;
+
+        }
+
+
+        pointsLine->setDimensionNames(dimNames);
         events().notifyDatasetDataChanged(points);
-        
+        events().notifyDatasetDataChanged(pointsLine);
+
+
+
         points->getDataHierarchyItem().setTaskFinished();
-        
-        
+        pointsLine->getDataHierarchyItem().setTaskFinished();
+
+
+
     }
 }
 
@@ -437,23 +498,23 @@ hdps::DataTypes VTKLoaderPluginFactory::supportedDataTypes() const
 
 std::vector<std::string> VTKLoaderPlugin::cutString(std::string str)
 {
-    
+
     std::vector<std::string> spaceSeperated;
     std::string word = "";
     for (auto x : str)
     {
         if (x == ' ')
         {
-            spaceSeperated.push_back(word);            
+            spaceSeperated.push_back(word);
             word = "";
-            
+
         }
         else {
             word = word + x;
         }
     }
     spaceSeperated.push_back(word);
-    
+
     return spaceSeperated;
 }
 
