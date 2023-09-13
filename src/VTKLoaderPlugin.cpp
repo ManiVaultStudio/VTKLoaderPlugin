@@ -325,6 +325,7 @@ void VTKLoaderPlugin::loadData()
                     auto temp = lineIndex;
 
                     int l = 0;
+                    //for (int i = 0; i < pointLocationsVector.size(); i++) {
                     for (int i = 0; i < pointLocationsVector.size(); i++) {
                         if (test == 0)//previousIndex != lineIndex[i])
                         {
@@ -402,10 +403,27 @@ void VTKLoaderPlugin::loadData()
                 dataSet.push_back(flowLines[i][j][0]);
                 dataSet.push_back(flowLines[i][j][1]);
                 dataSet.push_back(flowLines[i][j][2]);
-                dataSet.push_back(flowLines[i][j][3]);
-                dataSet.push_back(flowLines[i][j][4]);
-                dataSet.push_back(flowLines[i][j][5]);
-                dataSet.push_back(flowLines[i][j][6]);
+                //if (false) {
+                    
+                //}
+                //else {
+                    dataSet.push_back(flowLines[i][j][3]);
+                    dataSet.push_back(flowLines[i][j][4]);
+                    dataSet.push_back(flowLines[i][j][5]);
+                    dataSet.push_back(flowLines[i][j][6]);
+                //}
+                    if (j == flowLines[i].size() - 1) {
+                        dataSet.push_back(flowLines[i][j][0] - flowLines[i][j - 1][0]);
+                        dataSet.push_back(flowLines[i][j][1] - flowLines[i][j - 1][1]);
+                        dataSet.push_back(flowLines[i][j][2] - flowLines[i][j - 1][2]);
+                    }
+                    else {
+                        dataSet.push_back(flowLines[i][j + 1][0] - flowLines[i][j][0]);
+                        dataSet.push_back(flowLines[i][j + 1][1] - flowLines[i][j][1]);
+                        dataSet.push_back(flowLines[i][j + 1][2] - flowLines[i][j][2]);
+                    }
+                
+                
             }
         }
 
@@ -416,8 +434,8 @@ void VTKLoaderPlugin::loadData()
         pointsLine->setProperty("lineSize", flowLines[0].size());
 
         if (type == "LINES") {
-            points->setData(dataSet.data(), flowLines.size() * (flowLines[0].size()), 7);
-            pointsLine->setData(dataSet.data(), flowLines.size(), flowLines[0].size() * 7);
+            points->setData(dataSet.data(), flowLines.size() * (flowLines[0].size()), 10);
+            pointsLine->setData(dataSet.data(), flowLines.size(), flowLines[0].size() * 10);
 
         }
         else {
@@ -425,37 +443,48 @@ void VTKLoaderPlugin::loadData()
         }
         std::vector<QString> dimNames;
         int alterator = 0;
-        for (int i = 0; i < flowLines[0].size() * 7; i++)
+        for (int i = 0; i < flowLines[0].size() * 10; i++)
         {
-            if (alterator == 7) {
+            if (alterator == 10) {
                 alterator = 0;
             }
             if (alterator == 0) {
-                QString string = QString("x") + QString::number(i / 7);
+                QString string = QString("x") + QString::number(i / 10);
                 dimNames.push_back(string);
             }
             else if (alterator == 1) {
-                QString string = QString("y") + QString::number(i / 7);
+                QString string = QString("y") + QString::number(i / 10);
                 dimNames.push_back(string);
             }
             else if (alterator == 2) {
-                QString string = QString("z") + QString::number(i / 7);
+                QString string = QString("z") + QString::number(i / 10);
                 dimNames.push_back(string);
             }
             else if (alterator == 3) {
-                QString string = QString("speed") + QString::number(i / 7);
+                QString string = QString("speed") + QString::number(i / 10);
                 dimNames.push_back(string);
             }
             else if (alterator == 4) {
-                QString string = QString("index") + QString::number(i / 7);
+                QString string = QString("index") + QString::number(i / 10);
                 dimNames.push_back(string);
             }
             else if (alterator == 5) {
-                QString string = QString("time") + QString::number(i / 7);
+                QString string = QString("time") + QString::number(i / 10);
+                dimNames.push_back(string);
+            }
+            else if (alterator == 6) {
+                QString string = QString("group") + QString::number(i / 10);
+                dimNames.push_back(string);
+            }else if (alterator == 7) {
+                QString string = QString("x'") + QString::number(i / 10);
+                dimNames.push_back(string);
+            }
+            else if (alterator == 8) {
+                QString string = QString("y'") + QString::number(i / 10);
                 dimNames.push_back(string);
             }
             else {
-                QString string = QString("group") + QString::number(i / 7);
+                QString string = QString("z'") + QString::number(i / 10);
                 dimNames.push_back(string);
             }
 
