@@ -29,7 +29,7 @@
 
 Q_PLUGIN_METADATA(IID "nl.tudelft.VTKLoaderPlugin")
 
-using namespace hdps;
+using namespace mv;
 
 // =============================================================================
 // View
@@ -91,14 +91,14 @@ void VTKLoaderPlugin::loadData()
         std::string fileName = base_filename.substr(base_filename.find_last_of("/\\") + 1);
         //std::string::size_type const p(base_filename.find_last_of('.'));
         //std::string fileName = base_filename.substr(0, p);
-        auto points = _core->addDataset<Points>("Points", QString::fromStdString(fileName)); // create a datafile in the hdps core
+        auto points = mv::data().createDataset<Points>("Points", QString::fromStdString(fileName));// _core->addDataset<Points>("Points", QString::fromStdString(fileName)); // create a datafile in the mv core
 
-        //auto pointsLine = _core->addDataset<Points>("Points", QString::fromStdString(fileName + "line")); // create a datafile in the hdps core
+        //auto pointsLine = _core->addDataset<Points>("Points", QString::fromStdString(fileName + "line")); // create a datafile in the mv core
         int timePoints = filePath.length();
         int numPoints;
         int xSize, ySize, zSize;
         int numDimensions = 8;
-        // creates a 1D vector used to read the completed dataset into the hdps points datatype
+        // creates a 1D vector used to read the completed dataset into the mv points datatype
         std::vector<float> dataSet;
         std::vector<std::vector<std::array<float, 7 >>> flowLines;
         std::vector<std::vector<std::array<float, 7 >>> flowLinesPrefix;
@@ -118,7 +118,8 @@ void VTKLoaderPlugin::loadData()
 
         // Notify the core system of the new data
         events().notifyDatasetAdded(points);
-        QCoreApplication::processEvents();
+        /*QCoreApplication::processEvents();
+        points->getDataHierarchyItem
         points->getDataHierarchyItem().setTaskRunning();
         points->getDataHierarchyItem().setTaskName("Load volume");
         points->getDataHierarchyItem().setTaskDescription("Allocating voxels");
@@ -126,7 +127,7 @@ void VTKLoaderPlugin::loadData()
 
         QCoreApplication::processEvents();
         points->getDataHierarchyItem().setTaskDescription("Loading points");
-        QCoreApplication::processEvents();
+        QCoreApplication::processEvents();*/
         std::vector<std::array<float, 3>> previousLocationVector;
         int resetPoint;
         for (int t = 0; t < 30; t++) {
@@ -319,8 +320,8 @@ void VTKLoaderPlugin::loadData()
                             }
                         }
                         if ((z % 10) == 0) {
-                            points->getDataHierarchyItem().setTaskProgress(z / static_cast<float>(zSize));
-                            QCoreApplication::processEvents();
+                            //points->getDataHierarchyItem().setTaskProgress(z / static_cast<float>(zSize));
+                            //QCoreApplication::processEvents();
                         }
                     }
                     pointLocationsVector.~vector();
@@ -459,8 +460,8 @@ void VTKLoaderPlugin::loadData()
                     
                 }
                 if (((group * 30 + t) % 5) == 0) {
-                    points->getDataHierarchyItem().setTaskProgress((t + group * 30) / static_cast<float>(groupSize * 30));
-                    QCoreApplication::processEvents();
+                    //points->getDataHierarchyItem().setTaskProgress((t + group * 30) / static_cast<float>(groupSize * 30));
+                    //QCoreApplication::processEvents();
                 }
             }
         }
@@ -526,6 +527,8 @@ void VTKLoaderPlugin::loadData()
         if (type == "LINES") {
             //points->setData(dataSet.data(), flowLines.size() * (flowLines[0].size()), 10);
             points->setData(dataSet.data(), flowLines.size(), flowLines[0].size() * 10);
+            
+            
 
         }
         else {
@@ -583,7 +586,7 @@ void VTKLoaderPlugin::loadData()
 
         }
 
-
+       
         points->setDimensionNames(dimNames);
         //pointsLine->setDimensionNames(dimNames);
         events().notifyDatasetDataChanged(points);
@@ -591,7 +594,7 @@ void VTKLoaderPlugin::loadData()
 
 
 
-        points->getDataHierarchyItem().setTaskFinished();
+        //points->getDataHierarchyItem().setTaskFinished();
         //pointsLine->getDataHierarchyItem().setTaskFinished();
 
 
@@ -601,7 +604,7 @@ void VTKLoaderPlugin::loadData()
 
 QIcon VTKLoaderPluginFactory::getIcon(const QColor& color /*= Qt::black*/) const
 {
-    return hdps::Application::getIconFont("FontAwesome").getIcon("cube", color);
+    return mv::Application::getIconFont("FontAwesome").getIcon("cube", color);
 }
 
 VTKLoaderPlugin* VTKLoaderPluginFactory::produce()
@@ -609,7 +612,7 @@ VTKLoaderPlugin* VTKLoaderPluginFactory::produce()
     return new VTKLoaderPlugin(this);
 }
 
-hdps::DataTypes VTKLoaderPluginFactory::supportedDataTypes() const
+mv::DataTypes VTKLoaderPluginFactory::supportedDataTypes() const
 {
     DataTypes supportedTypes;
     supportedTypes.append(PointType);
