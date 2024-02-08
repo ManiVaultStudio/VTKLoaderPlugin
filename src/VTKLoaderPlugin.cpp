@@ -29,7 +29,7 @@
 
 Q_PLUGIN_METADATA(IID "nl.tudelft.VTKLoaderPlugin")
 
-using namespace hdps;
+using namespace mv;
 
 // =============================================================================
 // View
@@ -84,17 +84,21 @@ void VTKLoaderPlugin::loadData()
 
     }
     else {
-        std::string base_filename = filePath[0].toStdString().substr(filePath[0].toStdString().find_last_of("/\\") + 1);
-        std::string::size_type const p(base_filename.find_last_of('.'));
-        std::string fileName = base_filename.substr(0, p);
-        auto points = _core->addDataset<Points>("Points", QString::fromStdString(fileName)); // create a datafile in the hdps core
+        
+        std::string base_filename = filePath[0].toStdString().substr(0,filePath[0].toStdString().find_last_of("/\\"));
+        //std::string base_filename = filePath[0].toStdString().substr(filePath[0].toStdString().find_first_of("/\\") - 1);
+        
+        std::string fileName = base_filename.substr(base_filename.find_last_of("/\\") + 1);
+        //std::string::size_type const p(base_filename.find_last_of('.'));
+        //std::string fileName = base_filename.substr(0, p);
+        auto points = mv::data().createDataset<Points>("Points", QString::fromStdString(fileName));// _core->addDataset<Points>("Points", QString::fromStdString(fileName)); // create a datafile in the mv core
 
-        auto pointsLine = _core->addDataset<Points>("Points", QString::fromStdString(fileName + "line")); // create a datafile in the hdps core
+        //auto pointsLine = _core->addDataset<Points>("Points", QString::fromStdString(fileName + "line")); // create a datafile in the mv core
         int timePoints = filePath.length();
         int numPoints;
         int xSize, ySize, zSize;
         int numDimensions = 8;
-        // creates a 1D vector used to read the completed dataset into the hdps points datatype
+        // creates a 1D vector used to read the completed dataset into the mv points datatype
         std::vector<float> dataSet;
         std::vector<std::vector<std::array<float, 7 >>> flowLines;
         std::vector<std::vector<std::array<float, 7 >>> flowLinesPrefix;
@@ -106,7 +110,7 @@ void VTKLoaderPlugin::loadData()
         std::string dimensions;
         int xCor, yCor, zCor;
         bool prefixVectorEngaged = false;
-        bool prefixInitialized = false;
+
         int groupSize = filePath.size() / 30;
         int countLines = -1;
         int cumulativeLines = 0;
@@ -114,7 +118,8 @@ void VTKLoaderPlugin::loadData()
 
         // Notify the core system of the new data
         events().notifyDatasetAdded(points);
-        QCoreApplication::processEvents();
+        /*QCoreApplication::processEvents();
+        points->getDataHierarchyItem
         points->getDataHierarchyItem().setTaskRunning();
         points->getDataHierarchyItem().setTaskName("Load volume");
         points->getDataHierarchyItem().setTaskDescription("Allocating voxels");
@@ -122,7 +127,72 @@ void VTKLoaderPlugin::loadData()
 
         QCoreApplication::processEvents();
         points->getDataHierarchyItem().setTaskDescription("Loading points");
-        QCoreApplication::processEvents();
+        QCoreApplication::processEvents();*/
+        std::vector<std::array<float, 3>> previousLocationVector;
+        int resetPoint;
+        for (int t = 0; t < 30; t++) {
+
+
+
+            int i = 0;
+            
+            
+            std::ifstream file(filePath[t].toStdString());
+            //std::cout << filePath[q].toStdString() << std::endl;
+            while (getline(file, myString)) {
+                if (i == 4) {
+                    dimensions = myString;
+                }
+                if (i == 5) {
+                    break;
+                }
+                i++;
+            }
+
+            if (!dimensions.empty()) {
+                std::vector<std::string> seperatedLine = VTKLoaderPlugin::cutString(myString);
+                numPoints = std::stoi(seperatedLine[1]);
+                seperatedLine = VTKLoaderPlugin::cutString(dimensions);
+                xSize = std::stoi(seperatedLine[1]);
+                ySize = std::stoi(seperatedLine[2]);
+                zSize = std::stoi(seperatedLine[3]);
+            }
+
+            std::array<float, 3> pointLocation = { 0,0,0 };
+            std::vector<std::array<float, 3>> pointLocationsVectorTemp;
+
+            std::vector<std::string> seperatedLine;
+            while (getline(file, myString)) {
+                if (myString.empty()) {
+                    break;
+                }
+                else if (!isNumber(VTKLoaderPlugin::cutString(myString)[0])) {
+                    break;
+                }
+                else {
+                    seperatedLine = VTKLoaderPlugin::cutString(myString);
+                    pointLocation[0] = std::stof(seperatedLine[0]);
+                    pointLocation[1] = std::stof(seperatedLine[1]);
+                    pointLocation[2] = std::stof(seperatedLine[2]);
+                    pointLocationsVectorTemp.push_back(pointLocation);
+                }
+            }
+            file.close();
+
+            
+            
+
+            if (t != 0) {
+                if (pointLocationsVectorTemp[0][0] != previousLocationVector[5][0] && pointLocationsVectorTemp[0][1] != previousLocationVector[5][1] && pointLocationsVectorTemp[0][2] != previousLocationVector[5][2])
+                {
+                    std::cout << "reset found at t =" << t << std::endl;
+                    resetPoint = t;
+                }
+            }
+            previousLocationVector = pointLocationsVectorTemp;
+        }
+    
+
 
 
         for (int group = 0; group < groupSize; group++) {
@@ -137,12 +207,12 @@ void VTKLoaderPlugin::loadData()
 
                 int i = 0;
                 int q = 0;
-                if (t + 10 >= 30) {
-                    q = t + 10 - 30 + group * 30;
+                if (t + resetPoint >= 30) {
+                    q = t + resetPoint - 30 + group * 30;
                     //std::cout << "first 10" << std::endl;
                 }
                 else {
-                    q = t + 10 + group * 30;
+                    q = t + resetPoint + group * 30;
                     //std::cout << "last" << std::endl;
 
                 }
@@ -186,7 +256,16 @@ void VTKLoaderPlugin::loadData()
                         pointLocationsVector.push_back(pointLocation);
                     }
                 }
+                 
                 numPoints = pointLocationsVector.size();
+
+                if (t != 0 && group == 0) {
+                    if (pointLocationsVector[0][0] != flowLines[0][flowLines[0].size() - 3][0] && pointLocationsVector[0][1] != flowLines[0][flowLines[0].size() - 3][1] && pointLocationsVector[0][2] != flowLines[0][flowLines[0].size() - 3][2])
+                    {
+                        //std::cout << "reset found at t =" << t << std::endl;
+                    }
+                }
+
                 getline(file, myString);
                 seperatedLine = VTKLoaderPlugin::cutString(myString);
                 type = seperatedLine[0];
@@ -241,8 +320,8 @@ void VTKLoaderPlugin::loadData()
                             }
                         }
                         if ((z % 10) == 0) {
-                            points->getDataHierarchyItem().setTaskProgress(z / static_cast<float>(zSize));
-                            QCoreApplication::processEvents();
+                            //points->getDataHierarchyItem().setTaskProgress(z / static_cast<float>(zSize));
+                            //QCoreApplication::processEvents();
                         }
                     }
                     pointLocationsVector.~vector();
@@ -323,8 +402,9 @@ void VTKLoaderPlugin::loadData()
                     float previousIndex = -1;
                     int test = 0;
                     auto temp = lineIndex;
-
+                    //std::cout << t << std::endl;
                     int l = 0;
+                    //for (int i = 0; i < pointLocationsVector.size(); i++) {
                     for (int i = 0; i < pointLocationsVector.size(); i++) {
                         if (test == 0)//previousIndex != lineIndex[i])
                         {
@@ -333,16 +413,27 @@ void VTKLoaderPlugin::loadData()
                             countLines++;
                             cumulativeLines++;
                             previousIndex = lineIndex[i];
+                            
                             tempFlowLine.clear();
 
                         }
                         tempFlowLine.push_back({ pointLocationsVector[i][0], pointLocationsVector[i][1], pointLocationsVector[i][2], speed[i], lineIndex[i], float(t), float(group) });
+                        
+                        
+
+                        /*if (t != 0 && group == 0 && cumulativeLines == 0) {
+                            
+                            if (tempFlowLine[0][0] != flowLines[0][flowLines[0].size() - 3][0] && tempFlowLine[0][1] != flowLines[0][flowLines[0].size() - 3][1] && tempFlowLine[0][2] != flowLines[0][flowLines[0].size() - 3][2])
+                            {
+                                std::cout << "reset found at t =" << t << std::endl;
+                            }
+                        }*/
+                        
                         l++;
-
-
                         if (l == lineIndexSize[countLines][0])
                         {
                             test = 0;
+                            
                             if (t == 0) {
                                 flowLines.push_back(tempFlowLine);
                                 tempFlowLine.clear();
@@ -366,10 +457,11 @@ void VTKLoaderPlugin::loadData()
                             }
                         }
                     }
+                    
                 }
                 if (((group * 30 + t) % 5) == 0) {
-                    points->getDataHierarchyItem().setTaskProgress((t + group * 30) / static_cast<float>(groupSize * 30));
-                    QCoreApplication::processEvents();
+                    //points->getDataHierarchyItem().setTaskProgress((t + group * 30) / static_cast<float>(groupSize * 30));
+                    //QCoreApplication::processEvents();
                 }
             }
         }
@@ -402,10 +494,27 @@ void VTKLoaderPlugin::loadData()
                 dataSet.push_back(flowLines[i][j][0]);
                 dataSet.push_back(flowLines[i][j][1]);
                 dataSet.push_back(flowLines[i][j][2]);
-                dataSet.push_back(flowLines[i][j][3]);
-                dataSet.push_back(flowLines[i][j][4]);
-                dataSet.push_back(flowLines[i][j][5]);
-                dataSet.push_back(flowLines[i][j][6]);
+                //if (false) {
+                    
+                //}
+                //else {
+                    dataSet.push_back(flowLines[i][j][3]);
+                    dataSet.push_back(flowLines[i][j][4]);
+                    dataSet.push_back(flowLines[i][j][5]);
+                    dataSet.push_back(flowLines[i][j][6]);
+                //}
+                    if (j == flowLines[i].size() - 1) {
+                        dataSet.push_back(flowLines[i][j][0] - flowLines[i][j - 1][0]);
+                        dataSet.push_back(flowLines[i][j][1] - flowLines[i][j - 1][1]);
+                        dataSet.push_back(flowLines[i][j][2] - flowLines[i][j - 1][2]);
+                    }
+                    else {
+                        dataSet.push_back(flowLines[i][j + 1][0] - flowLines[i][j][0]);
+                        dataSet.push_back(flowLines[i][j + 1][1] - flowLines[i][j][1]);
+                        dataSet.push_back(flowLines[i][j + 1][2] - flowLines[i][j][2]);
+                    }
+                
+                
             }
         }
 
@@ -413,11 +522,13 @@ void VTKLoaderPlugin::loadData()
         //points->getDataHierarchyItem().setTaskProgress(1.0f);
         //std::cout << "size: " << flowLines[0].size() << std::endl;
         points->setProperty("lineSize", flowLines[0].size());
-        pointsLine->setProperty("lineSize", flowLines[0].size());
+        //pointsLine->setProperty("lineSize", flowLines[0].size());
 
         if (type == "LINES") {
-            points->setData(dataSet.data(), flowLines.size() * (flowLines[0].size()), 7);
-            pointsLine->setData(dataSet.data(), flowLines.size(), flowLines[0].size() * 7);
+            //points->setData(dataSet.data(), flowLines.size() * (flowLines[0].size()), 10);
+            points->setData(dataSet.data(), flowLines.size(), flowLines[0].size() * 10);
+            
+            
 
         }
         else {
@@ -425,37 +536,48 @@ void VTKLoaderPlugin::loadData()
         }
         std::vector<QString> dimNames;
         int alterator = 0;
-        for (int i = 0; i < flowLines[0].size() * 7; i++)
+        for (int i = 0; i < flowLines[0].size() * 10; i++)
         {
-            if (alterator == 7) {
+            if (alterator == 10) {
                 alterator = 0;
             }
             if (alterator == 0) {
-                QString string = QString("x") + QString::number(i / 7);
+                QString string = QString("x") + QString::number(i / 10);
                 dimNames.push_back(string);
             }
             else if (alterator == 1) {
-                QString string = QString("y") + QString::number(i / 7);
+                QString string = QString("y") + QString::number(i / 10);
                 dimNames.push_back(string);
             }
             else if (alterator == 2) {
-                QString string = QString("z") + QString::number(i / 7);
+                QString string = QString("z") + QString::number(i / 10);
                 dimNames.push_back(string);
             }
             else if (alterator == 3) {
-                QString string = QString("speed") + QString::number(i / 7);
+                QString string = QString("speed") + QString::number(i / 10);
                 dimNames.push_back(string);
             }
             else if (alterator == 4) {
-                QString string = QString("index") + QString::number(i / 7);
+                QString string = QString("index") + QString::number(i / 10);
                 dimNames.push_back(string);
             }
             else if (alterator == 5) {
-                QString string = QString("time") + QString::number(i / 7);
+                QString string = QString("time") + QString::number(i / 10);
+                dimNames.push_back(string);
+            }
+            else if (alterator == 6) {
+                QString string = QString("group") + QString::number(i / 10);
+                dimNames.push_back(string);
+            }else if (alterator == 7) {
+                QString string = QString("x'") + QString::number(i / 10);
+                dimNames.push_back(string);
+            }
+            else if (alterator == 8) {
+                QString string = QString("y'") + QString::number(i / 10);
                 dimNames.push_back(string);
             }
             else {
-                QString string = QString("group") + QString::number(i / 7);
+                QString string = QString("z'") + QString::number(i / 10);
                 dimNames.push_back(string);
             }
 
@@ -464,15 +586,16 @@ void VTKLoaderPlugin::loadData()
 
         }
 
-
-        pointsLine->setDimensionNames(dimNames);
+       
+        points->setDimensionNames(dimNames);
+        //pointsLine->setDimensionNames(dimNames);
         events().notifyDatasetDataChanged(points);
-        events().notifyDatasetDataChanged(pointsLine);
+        //events().notifyDatasetDataChanged(pointsLine);
 
 
 
-        points->getDataHierarchyItem().setTaskFinished();
-        pointsLine->getDataHierarchyItem().setTaskFinished();
+        //points->getDataHierarchyItem().setTaskFinished();
+        //pointsLine->getDataHierarchyItem().setTaskFinished();
 
 
 
@@ -481,7 +604,7 @@ void VTKLoaderPlugin::loadData()
 
 QIcon VTKLoaderPluginFactory::getIcon(const QColor& color /*= Qt::black*/) const
 {
-    return hdps::Application::getIconFont("FontAwesome").getIcon("cube", color);
+    return mv::Application::getIconFont("FontAwesome").getIcon("cube", color);
 }
 
 VTKLoaderPlugin* VTKLoaderPluginFactory::produce()
@@ -489,7 +612,7 @@ VTKLoaderPlugin* VTKLoaderPluginFactory::produce()
     return new VTKLoaderPlugin(this);
 }
 
-hdps::DataTypes VTKLoaderPluginFactory::supportedDataTypes() const
+mv::DataTypes VTKLoaderPluginFactory::supportedDataTypes() const
 {
     DataTypes supportedTypes;
     supportedTypes.append(PointType);
