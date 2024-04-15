@@ -32,7 +32,8 @@ Q_PLUGIN_METADATA(IID "nl.tudelft.VTKLoaderPlugin")
 using namespace mv;
 
 // =============================================================================
-// View
+// VTK loader plugin, created in order to fascilitate the loading in of 4D flow pathline data.
+// Written by: Mitchell Martijn de Boer
 // =============================================================================
 
 VTKLoaderPlugin::~VTKLoaderPlugin(void)
@@ -57,19 +58,21 @@ void VTKLoaderPlugin::init()
  */
 void VTKLoaderPlugin::loadData()
 {
+    // Set current working directory.
     const auto workingDirectory = getSetting("Data/WorkingDirectory", QStandardPaths::standardLocations(QStandardPaths::DocumentsLocation)).toString();
-    //file_name.setFileMode(QFileDialog.ExistingFiles)
-
+    
+    // Read selected files from file selector.
     QFileDialog fileDialog;
     fileDialog.setFileMode(QFileDialog::ExistingFiles);
     QStringList filePath = fileDialog.getOpenFileNames(nullptr, "Open a .vtk file", workingDirectory); // Open the file selector
 
+
     if (QFileInfo(filePath[0]).exists())
         setSetting("Data/WorkingDirectory", QFileInfo(filePath[0]).absoluteDir().absolutePath());
 
-    std::string vtk = ".vtk";
     std::vector<int> incorrectIndex;
 
+    // Check if filetype == .vtk
     for (int i = 0; i < filePath.length(); i++) {
         int found = filePath[i].toStdString().find(".vtk");
         if (found == -1) {
@@ -77,6 +80,7 @@ void VTKLoaderPlugin::loadData()
         }
     }
 
+    // If the type is wrong, throw error, else start data loading.
     if (incorrectIndex.size() != 0) {
         QMessageBox messageBox;
         messageBox.critical(0, "Error", "File(s) is/are not of type(s) .vtk"); // Throws error if file format is wrong
@@ -84,21 +88,18 @@ void VTKLoaderPlugin::loadData()
 
     }
     else {
-        
+        // Convert string of file names, to individual correct file names.
         std::string base_filename = filePath[0].toStdString().substr(0,filePath[0].toStdString().find_last_of("/\\"));
-        //std::string base_filename = filePath[0].toStdString().substr(filePath[0].toStdString().find_first_of("/\\") - 1);
-        
         std::string fileName = base_filename.substr(base_filename.find_last_of("/\\") + 1);
-        //std::string::size_type const p(base_filename.find_last_of('.'));
-        //std::string fileName = base_filename.substr(0, p);
-        auto points = mv::data().createDataset<Points>("Points", QString::fromStdString(fileName));// _core->addDataset<Points>("Points", QString::fromStdString(fileName)); // create a datafile in the mv core
-
-        //auto pointsLine = _core->addDataset<Points>("Points", QString::fromStdString(fileName + "line")); // create a datafile in the mv core
+        
+        // Create empty pointdata to load the dataset into.
+        auto points = mv::data().createDataset<Points>("Points", QString::fromStdString(fileName));
         int timePoints = filePath.length();
         int numPoints;
         int xSize, ySize, zSize;
         int numDimensions = 8;
-        // creates a 1D vector used to read the completed dataset into the mv points datatype
+
+        // Creates a 1D vector used to read the completed dataset into the mv points datatype.
         std::vector<float> dataSet;
         std::vector<std::vector<std::array<float, 7 >>> flowLines;
         std::vector<std::vector<std::array<float, 7 >>> flowLinesPrefix;
@@ -111,34 +112,30 @@ void VTKLoaderPlugin::loadData()
         int xCor, yCor, zCor;
         bool prefixVectorEngaged = false;
 
+        // Calculates the number of seperate datagroups, this is done specifically for the 4D flow dataset that was used in the thesis 
+        // "Stochastic Neighbor Embedding for interactive visualization of flow patterns in 4D flow MRI" by Mitchell de Boer. This is
+        // because of the fact that this dataset consisted of path lines subdivided into flow components with each having 30 timepoints.
+        // Meaning that this calculates the amount of flow components added based on the amount of imported files.
         int groupSize = filePath.size() / 30;
+        
+        
         int countLines = -1;
         int cumulativeLines = 0;
         int cumulativeLinesSaved = 0;
 
         // Notify the core system of the new data
-        events().notifyDatasetAdded(points);
-        /*QCoreApplication::processEvents();
-        points->getDataHierarchyItem
-        points->getDataHierarchyItem().setTaskRunning();
-        points->getDataHierarchyItem().setTaskName("Load volume");
-        points->getDataHierarchyItem().setTaskDescription("Allocating voxels");
-        QCoreApplication::processEvents();
-
-        QCoreApplication::processEvents();
-        points->getDataHierarchyItem().setTaskDescription("Loading points");
-        QCoreApplication::processEvents();*/
+        mv::events().notifyDatasetAdded(points);
+        
         std::vector<std::array<float, 3>> previousLocationVector;
         int resetPoint;
+
+        // Loop over all timepoints.
         for (int t = 0; t < 30; t++) {
+            int i = 0;   
+            // Open the current file.
+            std::ifstream file(filePath[t].toStdString());       
 
-
-
-            int i = 0;
-            
-            
-            std::ifstream file(filePath[t].toStdString());
-            //std::cout << filePath[q].toStdString() << std::endl;
+            // Record metadata. (might be no longer necessary because this is done later as well)
             while (getline(file, myString)) {
                 if (i == 4) {
                     dimensions = myString;
@@ -148,7 +145,6 @@ void VTKLoaderPlugin::loadData()
                 }
                 i++;
             }
-
             if (!dimensions.empty()) {
                 std::vector<std::string> seperatedLine = VTKLoaderPlugin::cutString(myString);
                 numPoints = std::stoi(seperatedLine[1]);
@@ -157,10 +153,11 @@ void VTKLoaderPlugin::loadData()
                 ySize = std::stoi(seperatedLine[2]);
                 zSize = std::stoi(seperatedLine[3]);
             }
-
+            // Initializes vectors for data recording.
             std::array<float, 3> pointLocation = { 0,0,0 };
             std::vector<std::array<float, 3>> pointLocationsVectorTemp;
 
+            // Reads in the location of points. (might be no longer necessary because this is done later as well)
             std::vector<std::string> seperatedLine;
             while (getline(file, myString)) {
                 if (myString.empty()) {
@@ -181,7 +178,8 @@ void VTKLoaderPlugin::loadData()
 
             
             
-
+            // Because files were not fully ordered from start to finish, this loop records the point at which vectors no longer line up with the previous file. 
+            // The files after are then put in front of this first group of time points.
             if (t != 0) {
                 if (pointLocationsVectorTemp[0][0] != previousLocationVector[5][0] && pointLocationsVectorTemp[0][1] != previousLocationVector[5][1] && pointLocationsVectorTemp[0][2] != previousLocationVector[5][2])
                 {
@@ -194,30 +192,29 @@ void VTKLoaderPlugin::loadData()
     
 
 
-
+        // Loops over all flow components.
         for (int group = 0; group < groupSize; group++) {
-            /* std::cout << countLines << std::endl;
-             std::cout << cumulativeLines << std::endl;
-             cumulativeLines = cumulativeLines + countLines+1;
-             std::cout << cumulativeLines << std::endl;*/
-
+           
+            // Loop over all timepoints
             for (int t = 0; t < 30; t++) {
 
 
-
+                // Initialize indexing parameters
                 int i = 0;
                 int q = 0;
+
+                //Adjust the timpoint counter in order to load in data in the propper order
                 if (t + resetPoint >= 30) {
                     q = t + resetPoint - 30 + group * 30;
-                    //std::cout << "first 10" << std::endl;
                 }
                 else {
                     q = t + resetPoint + group * 30;
-                    //std::cout << "last" << std::endl;
-
                 }
+
+                // Open current timepoint file.
                 std::ifstream file(filePath[q].toStdString());
-                //std::cout << filePath[q].toStdString() << std::endl;
+                
+                // Record metadata.
                 while (getline(file, myString)) {
                     if (i == 4) {
                         dimensions = myString;
@@ -227,7 +224,6 @@ void VTKLoaderPlugin::loadData()
                     }
                     i++;
                 }
-
                 if (!dimensions.empty()) {
                     std::vector<std::string> seperatedLine = VTKLoaderPlugin::cutString(myString);
                     numPoints = std::stoi(seperatedLine[1]);
@@ -240,6 +236,7 @@ void VTKLoaderPlugin::loadData()
                 std::array<float, 3> pointLocation = { 0,0,0 };
                 std::vector<std::array<float, 3>> pointLocationsVector;
 
+                // Read point locataions. (mainly done in order to get to the end of the file)
                 std::vector<std::string> seperatedLine;
                 while (getline(file, myString)) {
                     if (myString.empty()) {
@@ -257,20 +254,16 @@ void VTKLoaderPlugin::loadData()
                     }
                 }
                  
-                numPoints = pointLocationsVector.size();
+                numPoints = pointLocationsVector.size();           
 
-                if (t != 0 && group == 0) {
-                    if (pointLocationsVector[0][0] != flowLines[0][flowLines[0].size() - 3][0] && pointLocationsVector[0][1] != flowLines[0][flowLines[0].size() - 3][1] && pointLocationsVector[0][2] != flowLines[0][flowLines[0].size() - 3][2])
-                    {
-                        //std::cout << "reset found at t =" << t << std::endl;
-                    }
-                }
-
+                // Record what type of data is loaded in.
                 getline(file, myString);
                 seperatedLine = VTKLoaderPlugin::cutString(myString);
                 type = seperatedLine[0];
+
+                // "scalars" is old depricated code for when i was working with vectorfields instead of pathlines. 
+                // This used to be a function that checked whether scalar points were loaded or pathlines.
                 if (type == "SCALARS") {
-                    std::cout << "wrong " << std::endl;
                     getline(file, myString);
                     std::vector<float> velocityMagnitude;
                     while (getline(file, myString)) {
@@ -319,10 +312,6 @@ void VTKLoaderPlugin::loadData()
                                 }
                             }
                         }
-                        if ((z % 10) == 0) {
-                            //points->getDataHierarchyItem().setTaskProgress(z / static_cast<float>(zSize));
-                            //QCoreApplication::processEvents();
-                        }
                     }
                     pointLocationsVector.~vector();
                 }
@@ -330,6 +319,7 @@ void VTKLoaderPlugin::loadData()
                     numDimensions = 3;
                     std::vector<std::vector<int>> lineIndexSize;
 
+                    // Records the size of pathlines, in order to make them all have the same amount of datapoints at the end.
                     std::vector<int> tempLineIndex;
                     while (getline(file, myString)) {
                         if (myString.empty()) {
@@ -343,10 +333,12 @@ void VTKLoaderPlugin::loadData()
                         lineIndexSize.push_back(tempLineIndex);
                         tempLineIndex.clear();
                     }
+                    // Skip irrelevent metadata.
                     getline(file, myString);
                     getline(file, myString);
                     getline(file, myString);
 
+                    // Records the indices of pathlines, is later used in order to allign the same pathline for over multiple timepoints.
                     std::vector<float> lineIndex;
                     while (getline(file, myString)) {
                         if (myString.empty()) {
@@ -359,6 +351,7 @@ void VTKLoaderPlugin::loadData()
                     }
                     getline(file, myString);
 
+                    // Record the velocity magnitude for points along pathlines.
                     std::vector<float> speed;
                     while (getline(file, myString)) {
                         if (myString.empty()) {
@@ -369,6 +362,7 @@ void VTKLoaderPlugin::loadData()
                         }
                         speed.push_back(std::stof(myString));
                     }
+
 
                     getline(file, myString);
                     std::vector<int> ID;
@@ -386,6 +380,8 @@ void VTKLoaderPlugin::loadData()
                     int iterator = 0;
                     std::vector<std::array<float, 7>> tempFlowLine;
 
+
+                    // Count the number of pathlines read in up to this points.
                     countLines = -1;
                     if (group == 0)
                     {
@@ -402,11 +398,13 @@ void VTKLoaderPlugin::loadData()
                     float previousIndex = -1;
                     int test = 0;
                     auto temp = lineIndex;
-                    //std::cout << t << std::endl;
+
                     int l = 0;
-                    //for (int i = 0; i < pointLocationsVector.size(); i++) {
+
+                    // Loop actually reading in pathline data.
                     for (int i = 0; i < pointLocationsVector.size(); i++) {
-                        if (test == 0)//previousIndex != lineIndex[i])
+                        // Checks if we have landed on a new pathine segment.
+                        if (test == 0)
                         {
                             l = 0;
                             test = 1;
@@ -417,31 +415,20 @@ void VTKLoaderPlugin::loadData()
                             tempFlowLine.clear();
 
                         }
-                        tempFlowLine.push_back({ pointLocationsVector[i][0], pointLocationsVector[i][1], pointLocationsVector[i][2], speed[i], lineIndex[i], float(t), float(group) });
-                        
-                        
-
-                        /*if (t != 0 && group == 0 && cumulativeLines == 0) {
-                            
-                            if (tempFlowLine[0][0] != flowLines[0][flowLines[0].size() - 3][0] && tempFlowLine[0][1] != flowLines[0][flowLines[0].size() - 3][1] && tempFlowLine[0][2] != flowLines[0][flowLines[0].size() - 3][2])
-                            {
-                                std::cout << "reset found at t =" << t << std::endl;
-                            }
-                        }*/
-                        
+                        // Record current points in pathline.
+                        tempFlowLine.push_back({ pointLocationsVector[i][0], pointLocationsVector[i][1], pointLocationsVector[i][2], speed[i], lineIndex[i], float(t), float(group) });                        
                         l++;
+
+                        // Checks if the end of this line segment has been reached, if so record the temporary vector into a permanent one containing already recorded pathline segments.
                         if (l == lineIndexSize[countLines][0])
                         {
-                            test = 0;
-                            
+                            test = 0;                            
                             if (t == 0) {
                                 flowLines.push_back(tempFlowLine);
-                                tempFlowLine.clear();
-                                //std::cout << i / 8 << std::endl;
+                                tempFlowLine.clear();                               
                             }
                             else {
                                 int copy = 0;
-
                                 for (int j = 3; j < l; j++)
                                 {
                                     flowLines[cumulativeLines].push_back(tempFlowLine[j]);
@@ -452,39 +439,20 @@ void VTKLoaderPlugin::loadData()
                                     {
                                         flowLines[cumulativeLines].push_back(tempFlowLine[copy]);
                                     }
-
                                 }
                             }
                         }
                     }
                     
                 }
-                if (((group * 30 + t) % 5) == 0) {
-                    //points->getDataHierarchyItem().setTaskProgress((t + group * 30) / static_cast<float>(groupSize * 30));
-                    //QCoreApplication::processEvents();
-                }
+
             }
         }
+        // After all data has been loaded in, convert it into the created points dataset, I think the pathlines vector could be removed, but im not 100% about that.
         int q = 0;
         for (int i = 0; i < flowLines.size(); i++) {
             for (int j = 0; j < flowLines[i].size(); j++) {
-                /*if (flowLines[i][j][0] > 400) {
-                    std::cout << "x: " << "i=" << i << "j= " << j  << "    " << flowLines[i][j][0] << "    " << flowLines[i][j][4] << std::endl;
-                }
-                if (flowLines[i][j][1] > 400) {
-                    std::cout << "y: " << "i=" << i << "j= " << j  << "    " << flowLines[i][j][0] << "    " << flowLines[i][j][4] << std::endl;
-                }*/
-                //if (flowLines[i][j][2] > 400) {
-                //    std::cout << "z: " << "i=" << i << "j= " << j << std::endl;
-                //}
-                //if (flowLines[i][j][4] == 0) {
-                //    //std::cout << "found" << std::endl;
-                //}
 
-                if (flowLines[i].size() > q) {
-                    std::cout << flowLines[i].size() << "   " << i << " " << flowLines.size() << std::endl;
-                    q = flowLines[i].size();
-                }
                 pathlines.push_back(flowLines[i][j][0]);
                 pathlines.push_back(flowLines[i][j][1]);
                 pathlines.push_back(flowLines[i][j][2]);
@@ -494,46 +462,40 @@ void VTKLoaderPlugin::loadData()
                 dataSet.push_back(flowLines[i][j][0]);
                 dataSet.push_back(flowLines[i][j][1]);
                 dataSet.push_back(flowLines[i][j][2]);
-                //if (false) {
-                    
-                //}
-                //else {
-                    dataSet.push_back(flowLines[i][j][3]);
-                    dataSet.push_back(flowLines[i][j][4]);
-                    dataSet.push_back(flowLines[i][j][5]);
-                    dataSet.push_back(flowLines[i][j][6]);
-                //}
-                    if (j == flowLines[i].size() - 1) {
-                        dataSet.push_back(flowLines[i][j][0] - flowLines[i][j - 1][0]);
-                        dataSet.push_back(flowLines[i][j][1] - flowLines[i][j - 1][1]);
-                        dataSet.push_back(flowLines[i][j][2] - flowLines[i][j - 1][2]);
-                    }
-                    else {
-                        dataSet.push_back(flowLines[i][j + 1][0] - flowLines[i][j][0]);
-                        dataSet.push_back(flowLines[i][j + 1][1] - flowLines[i][j][1]);
-                        dataSet.push_back(flowLines[i][j + 1][2] - flowLines[i][j][2]);
-                    }
+
+                dataSet.push_back(flowLines[i][j][3]);
+                dataSet.push_back(flowLines[i][j][4]);
+                dataSet.push_back(flowLines[i][j][5]);
+                dataSet.push_back(flowLines[i][j][6]);
+
+                // Calculate the vectors at timepoints.
+                if (j == flowLines[i].size() - 1) {
+                    dataSet.push_back(flowLines[i][j][0] - flowLines[i][j - 1][0]);
+                    dataSet.push_back(flowLines[i][j][1] - flowLines[i][j - 1][1]);
+                    dataSet.push_back(flowLines[i][j][2] - flowLines[i][j - 1][2]);
+                }
+                else {
+                    dataSet.push_back(flowLines[i][j + 1][0] - flowLines[i][j][0]);
+                    dataSet.push_back(flowLines[i][j + 1][1] - flowLines[i][j][1]);
+                    dataSet.push_back(flowLines[i][j + 1][2] - flowLines[i][j][2]);
+                }
                 
                 
             }
         }
 
-
-        //points->getDataHierarchyItem().setTaskProgress(1.0f);
-        //std::cout << "size: " << flowLines[0].size() << std::endl;
+        
         points->setProperty("lineSize", flowLines[0].size());
-        //pointsLine->setProperty("lineSize", flowLines[0].size());
 
+        // Put dataset into the points object.
         if (type == "LINES") {
-            //points->setData(dataSet.data(), flowLines.size() * (flowLines[0].size()), 10);
             points->setData(dataSet.data(), flowLines.size(), flowLines[0].size() * 10);
-            
-            
-
         }
         else {
             points->setData(dataSet.data(), numPoints * timePoints, numDimensions);
         }
+
+        // Add dimension names.
         std::vector<QString> dimNames;
         int alterator = 0;
         for (int i = 0; i < flowLines[0].size() * 10; i++)
@@ -588,14 +550,7 @@ void VTKLoaderPlugin::loadData()
 
        
         points->setDimensionNames(dimNames);
-        //pointsLine->setDimensionNames(dimNames);
-        events().notifyDatasetDataChanged(points);
-        //events().notifyDatasetDataChanged(pointsLine);
-
-
-
-        //points->getDataHierarchyItem().setTaskFinished();
-        //pointsLine->getDataHierarchyItem().setTaskFinished();
+        mv::events().notifyDatasetDataChanged(points);
 
 
 
